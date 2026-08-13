@@ -55,6 +55,8 @@ earliest-arriving option that has stock, revises the promise, states
 explicitly that it will miss and by how many days, and flags it for review
 rather than shipping quietly.
 
+Note: in the conversation with Ivan i talked through a carrier selection engine as well - i instead worked that into the above logic as a part of the flow vs having a dedicated "FC Gate" then a dedicated "Carrier Gate".
+
 ### Self-service rules engine
 
 I built a self-service rules engine because routing priorities shouldn't require an engineering change every time the
