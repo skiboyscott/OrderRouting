@@ -37,7 +37,8 @@
 
   let state = {
     view: 'queue', section: 'Orders', selected: 'O-1002', query: '', filter: 'All',
-    tab: 'All routes', runAt: Date.now(), rules: E.loadRules()
+    tab: 'All routes', runAt: Date.now(), rules: E.loadRules(),
+    customOrders: [], nextCustomSeq: 1, simFormOpen: false
   };
 
   function esc(s) {
@@ -57,7 +58,7 @@
     render();
   }
   function step(d) {
-    const { results } = E.runEngine(state.rules);
+    const { results } = E.runEngine(state.rules, state.customOrders);
     const i = results.findIndex(r => r.order.id === state.selected);
     const base = i === -1 ? 0 : i;
     const n = results[(base + d + results.length) % results.length];
@@ -67,12 +68,13 @@
   // ---------- derive all display data for the current state ----------
   function deriveView(state) {
     const rules = state.rules;
-    const { results, inv } = E.runEngine(rules);
+    const { results, inv } = E.runEngine(rules, state.customOrders);
     const view = state.view;
     const byId = {};
     results.forEach(r => { byId[r.order.id] = r; });
     const sel = byId[state.selected] || results[0];
     const o = sel.order;
+    const simIds = new Set(state.customOrders.map(co => co.id));
 
     const hits = results.filter(r => r.mode === 'ok').length;
     const tolerated = results.filter(r => r.mode === 'tolerated').length;
@@ -109,7 +111,8 @@
         cost: r.pick ? E.money(r.pick.cost) : '—',
         status: st.label, dotKey: st.key,
         subStatus: overCeil ? 'over cost cap' : 'open ›',
-        subColor: overCeil ? 'var(--warn)' : 'var(--faint)'
+        subColor: overCeil ? 'var(--warn)' : 'var(--faint)',
+        sim: simIds.has(r.order.id)
       };
     });
 
@@ -150,6 +153,7 @@
       const st = E.statusOf(r);
       return {
         seq: r.rank, id: r.order.id, tag: st.label, key: st.key,
+        sim: simIds.has(r.order.id),
         text: r.pick
           ? 'Reserved 1 × ' + r.order.sku + ' at ' + r.pick.fc.name + ' · ' + r.pick.svc.carrier + ' ' + r.pick.svc.name.toLowerCase() + ' to ' + r.order.city + ' · ' + E.money(r.pick.cost) + ' · arrives ' + E.fmtDate(r.pick.transit) + ' against a ' + E.fmtDate(r.order.eddDays) + ' promise'
           : 'No reservation — ' + r.order.sku + ' unavailable at every active facility'
@@ -238,8 +242,8 @@
       { label: 'By mode · ground / expedited / air', value: modeUse.ground + ' / ' + modeUse.expedited + ' / ' + modeUse.air, pctv: '100%', color: '#cdd3e0' }
     ]);
 
-    const baseSum = E.summary(E.DEFAULTS);
-    const nowSum = E.summary(rules);
+    const baseSum = E.summary(E.DEFAULTS, state.customOrders);
+    const nowSum = E.summary(rules, state.customOrders);
     const deltaStr = (a, b, isMoney) => {
       const d = a - b;
       if (Math.abs(d) < 0.005) return { t: 'same', c: 'var(--mute)' };
@@ -340,7 +344,7 @@
       cost: sel.pick ? E.money(sel.pick.cost) : '—',
       premium: sel.pick && sel.cheapestStock ? E.money(sel.pick.cost - sel.cheapestStock.cost) : '—',
       comboNote: visible.length + ' of ' + sel.combos.length + ' combinations · ' + (E.FCS.length - rules.pausedFcs.length) + ' facilities × enabled services',
-      funnel, combos,
+      funnel, combos, sim: simIds.has(o.id),
       reasons: E.reasonsFor(sel, rules)
     };
 
@@ -364,10 +368,13 @@
       facilityActiveNote: (E.FCS.length - rules.pausedFcs.length) + ' of ' + E.FCS.length + ' facilities active',
       serviceActiveNote: E.SERVICES.filter(s => rules.pausedServices.indexOf(s.id) < 0 && (rules.allowAir || s.mode !== 'air')).length + ' of ' + E.SERVICES.length + ' services enabled',
       queueCount: filtered.length === results.length ? results.length + ' orders' : filtered.length + ' of ' + results.length + ' orders',
-      queueNote: 'tightest EDD first · ' + hits + ' on promise · ' + tolerated + ' late within rules · ' + needsReview + ' auto-adjusted' + (overCap ? ' · ' + overCap + ' over cost cap' : ''),
+      queueNote: 'tightest EDD first · ' + hits + ' on promise · ' + tolerated + ' late within rules · ' + needsReview + ' auto-adjusted' + (overCap ? ' · ' + overCap + ' over cost cap' : '') + (state.customOrders.length ? ' · ' + state.customOrders.length + ' simulated' : ''),
       queueFootnote: 'Every order is routed automatically from your rules — nothing waits on a person. Margin is slack against the promised date; up to ' + rules.lateTolerance + ' day(s) late routes as configured, and routes above ' + E.money(rules.costCeiling) + ' per parcel are reported here after the fact.',
       lastRun: new Date(state.runAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }),
       comboTabs,
+      simFormOpen: state.simFormOpen,
+      presetCities: E.PRESET_CITIES,
+      skuOptions: Object.keys(E.SKUS).map(k => ({ id: k, label: E.SHORT[k] })),
       sel: selVals
     };
   }
@@ -428,7 +435,8 @@
       + '<span class="dot dot-' + o.dotKey + '"></span>'
       + '<span class="mono ellipsis" style="font-size:12px;font-weight:500">' + esc(o.id) + '</span>'
       + '</div>'
-      + '<span class="ellipsis c-mute" style="font-size:10.5px;padding-left:11px">seq ' + o.seq + '</span>'
+      + '<span class="ellipsis c-mute" style="font-size:10.5px;padding-left:11px">seq ' + o.seq + (o.sim ? ' · Simulated' : '') + '</span>'
+      + (o.sim ? '<button class="row-remove" data-action="remove-sim-order" data-id="' + esc(o.id) + '" title="Remove simulated order">✕</button>' : '')
       + '</div>'
       + '<div class="cell"><span class="ellipsis" style="font-size:12.5px">' + esc(o.dest) + '</span><span class="ellipsis c-mute" style="font-size:10.5px">' + esc(o.zone) + '</span></div>'
       + '<div class="cell"><span class="ellipsis" style="font-size:12.5px">' + esc(o.skuName) + '</span><span class="mono ellipsis c-mute" style="font-size:10.5px">' + esc(o.sku) + '</span></div>'
@@ -448,8 +456,12 @@
       + '<div class="page-head">'
       + '<div class="page-title-group"><h1 class="page-title">Batch queue</h1>'
       + '<div class="page-desc">Orders are processed tightest-promise-first, and inventory reservations carry across the batch so later orders see real stock. Open an order to see every facility × carrier service the engine evaluated.</div></div>'
+      + '<div style="display:flex;align-items:center;gap:12px">'
       + '<div class="last-run mono">Last run ' + esc(v.lastRun) + '</div>'
+      + '<button class="btn-primary" data-action="toggle-sim-form">' + (v.simFormOpen ? 'Close' : '+ Add order') + '</button>'
       + '</div>'
+      + '</div>'
+      + (v.simFormOpen ? renderSimForm(v) : '')
       + '<button class="rules-strip" data-action="goto" data-view="rules" data-section="Routing rules">'
       + '<div class="rules-strip-left"><span class="rules-strip-label">Active rules</span>'
       + v.ruleChips.map(c => '<span class="rule-chip' + (c.on ? ' on' : '') + '">' + esc(c.label) + '</span>').join('')
@@ -475,6 +487,35 @@
       + '</main>';
   }
 
+  function renderSimForm(v) {
+    return '<section class="card card-section sim-form-card">'
+      + '<div class="section-head"><span class="section-head-title">Add a simulated order</span><span class="section-head-note">Runs through the same engine, gated by the same active facilities, carriers, and rules as the rest of the batch.</span></div>'
+      + '<form data-sim-form class="sim-form">'
+      + '<div class="sim-form-grid">'
+      + '<div class="field"><span class="field-label">Destination</span>'
+      + '<select data-sim-city>'
+      + v.presetCities.map((c, i) => '<option value="' + i + '">' + esc(c.city) + '</option>').join('')
+      + '<option value="custom">Custom coordinates…</option>'
+      + '</select></div>'
+      + '<div class="field"><span class="field-label">SKU</span>'
+      + '<select data-sim-sku>' + v.skuOptions.map(s => '<option value="' + esc(s.id) + '">' + esc(s.label) + '</option>').join('') + '</select></div>'
+      + '<div class="field"><span class="field-label">Quantity</span><input type="number" data-sim-qty min="1" max="5" value="1" /></div>'
+      + '<div class="field"><span class="field-label">EDD (days from today)</span><input type="number" data-sim-edd min="0" max="10" value="4" /></div>'
+      + '</div>'
+      + '<div class="sim-form-grid hidden" data-sim-custom>'
+      + '<div class="field"><span class="field-label">City name</span><input type="text" data-sim-custom-city placeholder="e.g. Boise, ID" /></div>'
+      + '<div class="field"><span class="field-label">Zone</span><input type="text" data-sim-custom-zone placeholder="e.g. Zone 4 · residential" /></div>'
+      + '<div class="field"><span class="field-label">Latitude</span><input type="number" step="0.01" min="-90" max="90" data-sim-custom-lat placeholder="-90 to 90" /></div>'
+      + '<div class="field"><span class="field-label">Longitude</span><input type="number" step="0.01" min="-180" max="180" data-sim-custom-lon placeholder="-180 to 180" /></div>'
+      + '</div>'
+      + '<div class="sim-form-error hidden" data-sim-error></div>'
+      + '<div class="sim-form-actions">'
+      + '<button type="submit" class="btn-primary">Add to batch</button>'
+      + '<button type="button" class="btn-ghost" data-action="cancel-sim-form">Cancel</button>'
+      + '</div>'
+      + '</form>'
+      + '</section>';
+  }
   function renderComboRow(c) {
     return '<div class="eval-grid eval-row' + (c.selected ? ' selected' : '') + (c.faded ? ' faded' : '') + '">'
       + '<div class="cell"><span class="ellipsis" style="font-size:12.5px;font-weight:500">' + esc(c.fcName) + '</span><span class="mono c-mute" style="font-size:10px">' + esc(c.fcMeta) + '</span></div>'
@@ -492,9 +533,12 @@
     return '<main class="view">'
       + '<button class="btn-ghost" style="align-self:flex-start" data-action="set-view" data-view="queue">‹ Back to batch queue</button>'
       + '<div class="detail-head">'
-      + '<div class="detail-title-group"><div class="detail-title-row"><h1 class="detail-id">' + esc(s.id) + '</h1><span class="chip chip-' + s.statusKey + '">' + esc(s.status) + '</span></div>'
+      + '<div class="detail-title-group"><div class="detail-title-row"><h1 class="detail-id">' + esc(s.id) + '</h1><span class="chip chip-' + s.statusKey + '">' + esc(s.status) + '</span>'
+      + (s.sim ? '<span class="chip chip-acc">Simulated</span>' : '') + '</div>'
       + '<div class="detail-summary">' + esc(s.summaryLine) + '</div></div>'
-      + '<div class="detail-nav"><button class="btn-ghost" data-action="prev-order">‹ Prev</button><button class="btn-ghost" data-action="next-order">Next ›</button></div>'
+      + '<div class="detail-nav">'
+      + (s.sim ? '<button class="btn-ghost" data-action="remove-sim-order" data-id="' + esc(s.id) + '">Remove order</button>' : '')
+      + '<button class="btn-ghost" data-action="prev-order">‹ Prev</button><button class="btn-ghost" data-action="next-order">Next ›</button></div>'
       + '</div>'
       + '<div class="detail-grid">'
       + '<section class="card detail-card">'
@@ -568,7 +612,9 @@
       + '<section class="card card-section"><div class="card-head"><span class="card-head-title">Reservation ledger</span><span class="card-head-note">in processing order</span></div>'
       + v.ledger.map(l =>
         '<div class="ledger-row"><span class="ledger-seq mono">' + l.seq + '</span><span class="ledger-id mono">' + esc(l.id) + '</span>'
-        + '<span class="ledger-text">' + esc(l.text) + '</span><span class="chip chip-' + l.key + '">' + esc(l.tag) + '</span></div>'
+        + '<span class="ledger-text">' + esc(l.text) + '</span>'
+        + (l.sim ? '<span class="chip chip-acc">Simulated</span>' : '')
+        + '<span class="chip chip-' + l.key + '">' + esc(l.tag) + '</span></div>'
       ).join('') + '</section>'
       + '</main>';
   }
@@ -723,6 +769,14 @@
     }
     if (a === 'toggle-air') { setRule({ allowAir: !state.rules.allowAir }); return; }
     if (a === 'set-objective') { setRule({ objective: el.dataset.obj }); return; }
+    if (a === 'toggle-sim-form') { setState({ simFormOpen: !state.simFormOpen }); return; }
+    if (a === 'cancel-sim-form') { setState({ simFormOpen: false }); return; }
+    if (a === 'remove-sim-order') {
+      const id = el.dataset.id;
+      const customOrders = state.customOrders.filter(o => o.id !== id);
+      setState({ customOrders, view: 'queue' });
+      return;
+    }
     if (a === 'reset-rules') {
       const rules = Object.assign({}, E.DEFAULTS);
       state = Object.assign({}, state, { rules });
@@ -756,10 +810,63 @@
   function onChange(e) {
     const t = e.target;
     if (t.matches && t.matches('[data-slider]')) render();
+    if (t.matches && t.matches('[data-sim-city]')) {
+      const custom = $app.querySelector('[data-sim-custom]');
+      if (custom) custom.classList.toggle('hidden', t.value !== 'custom');
+      return;
+    }
+  }
+
+  function showSimError(form, msg) {
+    const el = form.querySelector('[data-sim-error]');
+    if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+  }
+  function onSubmit(e) {
+    const form = e.target;
+    if (!(form.matches && form.matches('[data-sim-form]'))) return;
+    e.preventDefault();
+
+    const citySel = form.querySelector('[data-sim-city]');
+    const isCustom = citySel.value === 'custom';
+    let city, zone, lat, lon;
+
+    if (isCustom) {
+      city = form.querySelector('[data-sim-custom-city]').value.trim();
+      zone = form.querySelector('[data-sim-custom-zone]').value.trim();
+      const latRaw = form.querySelector('[data-sim-custom-lat]').value.trim();
+      const lonRaw = form.querySelector('[data-sim-custom-lon]').value.trim();
+      lat = Number(latRaw);
+      lon = Number(lonRaw);
+      if (!city) return showSimError(form, 'Enter a city name for the custom destination.');
+      if (!zone) return showSimError(form, 'Enter a zone label for the custom destination.');
+      if (latRaw === '' || !Number.isFinite(lat) || lat < -90 || lat > 90) return showSimError(form, 'Latitude must be a number between -90 and 90.');
+      if (lonRaw === '' || !Number.isFinite(lon) || lon < -180 || lon > 180) return showSimError(form, 'Longitude must be a number between -180 and 180.');
+    } else {
+      const preset = E.PRESET_CITIES[Number(citySel.value)];
+      if (!preset) return showSimError(form, 'Choose a destination.');
+      city = preset.city; zone = preset.zone; lat = preset.lat; lon = preset.lon;
+    }
+
+    const sku = form.querySelector('[data-sim-sku]').value;
+    const qty = Math.round(Number(form.querySelector('[data-sim-qty]').value));
+    const eddDays = Math.round(Number(form.querySelector('[data-sim-edd]').value));
+    if (!E.SKUS[sku]) return showSimError(form, 'Choose a SKU.');
+    if (!Number.isFinite(qty) || qty < 1) return showSimError(form, 'Quantity must be at least 1.');
+    if (!Number.isFinite(eddDays) || eddDays < 0) return showSimError(form, 'EDD must be 0 or more days from today.');
+
+    const order = { id: 'O-' + (2000 + state.nextCustomSeq), city, zone, lat, lon, sku, qty, eddDays };
+    setState({
+      customOrders: state.customOrders.concat([order]),
+      nextCustomSeq: state.nextCustomSeq + 1,
+      simFormOpen: false,
+      selected: order.id,
+      view: 'detail'
+    });
   }
 
   document.addEventListener('click', onClick);
   document.addEventListener('input', onInput);
   document.addEventListener('change', onChange);
+  document.addEventListener('submit', onSubmit);
   render();
 })();

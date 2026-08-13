@@ -65,6 +65,17 @@
     { id: 'O-1005', city: 'Honolulu, HI', zone: 'Zone 8 · offshore', lat: 21.31, lon: -157.86, sku: 'SKU-1042', qty: 1, eddDays: 2 }
   ];
 
+  const PRESET_CITIES = [
+    { city: 'Seattle, WA', zone: 'Zone 2 · residential', lat: 47.61, lon: -122.33 },
+    { city: 'Phoenix, AZ', zone: 'Zone 3 · residential', lat: 33.45, lon: -112.07 },
+    { city: 'Minneapolis, MN', zone: 'Zone 4 · residential', lat: 44.98, lon: -93.27 },
+    { city: 'New York, NY', zone: 'Zone 5 · residential', lat: 40.71, lon: -74.01 },
+    { city: 'Miami, FL', zone: 'Zone 6 · residential', lat: 25.76, lon: -80.19 },
+    { city: 'Kansas City, MO', zone: 'Zone 4 · commercial', lat: 39.10, lon: -94.58 },
+    { city: 'Portland, OR', zone: 'Zone 2 · residential', lat: 45.52, lon: -122.68 },
+    { city: 'Anchorage, AK', zone: 'Zone 9 · offshore', lat: 61.22, lon: -149.90 }
+  ];
+
   const TODAY = new Date(2026, 7, 12);
   const DEFAULTS = { objective: 'promise', lateTolerance: 0, maxPremium: 12, costCeiling: 40, loadThreshold: 80, allowAir: true, pausedFcs: [], pausedServices: [] };
   const STORE = 'odm.rules.v2';
@@ -93,11 +104,11 @@
     try { global.localStorage.setItem(STORE, JSON.stringify(rules)); } catch (e) { /* ignore */ }
   }
 
-  function runEngine(rules) {
+  function runEngine(rules, extraOrders) {
     const inv = {};
     FCS.forEach(f => { inv[f.id] = Object.assign({}, INV0[f.id]); });
     const claims = {};
-    const seq = ORDERS.slice().sort((a, b) => a.eddDays - b.eddDays || a.id.localeCompare(b.id));
+    const seq = ORDERS.concat(extraOrders || []).sort((a, b) => a.eddDays - b.eddDays || a.id.localeCompare(b.id));
     const results = [];
     const activeFcs = FCS.filter(f => rules.pausedFcs.indexOf(f.id) < 0);
 
@@ -210,8 +221,8 @@
     return out;
   }
 
-  function summary(rules) {
-    const { results } = runEngine(rules);
+  function summary(rules, extraOrders) {
+    const { results } = runEngine(rules, extraOrders);
     const hits = results.filter(r => r.mode === 'ok').length;
     const routed = results.filter(r => r.pick);
     const adjusted = results.filter(r => r.mode === 'late' || r.mode === 'no-stock').length;
@@ -222,7 +233,7 @@
   }
 
   global.Engine = {
-    FCS, CARRIERS, SERVICES, SKUS, SHORT, INV0, ORDERS, TODAY, DEFAULTS, STORE,
+    FCS, CARRIERS, SERVICES, SKUS, SHORT, INV0, ORDERS, PRESET_CITIES, TODAY, DEFAULTS, STORE,
     miles, fmtDate, fmtShort, money,
     loadRules, saveRules,
     runEngine, statusOf, reasonsFor, summary
