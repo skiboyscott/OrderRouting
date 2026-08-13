@@ -8,10 +8,10 @@ the date shown to the shopper at checkout. That reframes the routing problem:
 the job isn't "ship it somehow," it's "protect the promise."
 
 **By default, this engine optimizes for hitting the promised EDD**, with cost
-as the second-order decision: among fulfillment center + carrier combinations
-that can still hit the date, it picks the cheapest one. That's the "Protect
+as the main decision driver: among fulfillment center + carrier combinations
+that can still hit the date, it picks the cheapest one, within the threshold. That's the "Protect
 the promise" mode in the rules engine (see below) — but it isn't hardcoded.
-Ops can instead configure the engine to **minimize cost with the date as a
+Merchants can instead configure the engine to **minimize cost with the date as a
 floor**, where the cheapest route within a defined late-tolerance wins, and a
 faster route is only chosen when nothing cheaper qualifies.
 
@@ -32,19 +32,17 @@ combination** in the network — not just FCs in isolation — through three
 gates, in order, and **every combination's evaluation is shown, not just the
 winner's**:
 
-1. **Constraint gate** — blunt on/off rules applied before any scoring:
-   is air service allowed, is the facility paused, is this carrier service
-   disabled. Anything excluded here never reaches scoring at all.
-2. **Stock gate** — does the FC have enough on-hand inventory for the order?
+1. **Constraint gate** — blunt on/off rules applied before any scoring. Anything excluded here never reaches scoring at all.
+3. **Stock gate** — does the FC have enough on-hand inventory for the order?
    FCs without stock are eliminated, along with every carrier option that
    would have shipped from them.
-3. **Promise gate** — for each FC that passes, every available carrier /
+4. **Promise gate** — for each FC that passes, every available carrier /
    service level is evaluated for transit time, including a facility-load
    penalty: FCs running above a configurable utilization threshold (default
    60%) get a one-day handling penalty in the transit math, which naturally
    pushes volume toward quieter facilities. Would the order arrive by the
    promised EDD via this specific FC + carrier pairing?
-4. **Cost gate** — among combinations that clear the prior gates (per the
+5. **Cost gate** — among combinations that clear the prior gates (per the
    active objective mode and its thresholds), the winner is selected, and
    the runner-up's cost is shown alongside it so the actual dollar tradeoff
    is visible, not implied.
@@ -57,7 +55,7 @@ rather than shipping quietly.
 
 ### Self-service rules engine
 
-Routing priorities shouldn't require an engineering change every time the
+I built a self-service rules engine because routing priorities shouldn't require an engineering change every time the
 business wants to shift strategy, so the objective and its thresholds are
 exposed as a configuration surface an ops user can adjust directly:
 
@@ -102,6 +100,9 @@ change and re-run it against live orders before committing.
   deadline, claims the unit at LAX, and `O-1004` — which loses that unit —
   cleanly reroutes to the remaining unit at Chicago rather than failing.
 
+## Add Order model testing
+I added a manual way to add an order to see how the routing rules would come into play. The manual add order is still bound by the simple fabricated FCs and carriers, but allows the user to see the routing rules that come into play and how the good is shipped to the end destination.
+
 ## Assumptions and shortcuts
 
 This is a prototype, so I deliberately simplified several things that a real
@@ -125,36 +126,14 @@ system would need to get right:
   numbers shown in the impact panel and are called out there directly
   rather than silently assumed away.
 
-## What I'd build next before this went near a real merchant
+## What I didn't get to in the prototype
+1. Dynamic inventory to further test the model - i intentionally left this static to purely prove out the routing engine
+2. Split Shipments and complex orders - i would prototype this a bit more and work into supply chain complexities to fulfill complex orders
+3. Network capacity caps - defined by ShipBob
+4. Kill threshold defined up front - how can we be more explicit in defining and measuring the EDDs and more aggressive in order routing
+5. a real metrics dashboard instead of what is there
+6. audit trail on rules changes since these carry real business impact
 
-1. **Replace the distance heuristic and generic carrier tiers with real
-   carrier rate cards, contracted service levels, and historical
-   transit-time performance data**, so the cost, EDD-feasibility, and
-   carrier-choice numbers are trustworthy rather than illustrative.
-2. **Model split shipments explicitly** — right now the engine assumes one
-   FC fulfills the whole order; multi-item orders with no single FC in
-   stock need a defined split-vs-delay tradeoff, with its own cost/promise
-   framing.
-3. **Add hard network-level capacity caps**, not just the soft load
-   penalty, so the engine doesn't repeatedly funnel volume into one
-   facility and create a new bottleneck the penalty alone doesn't prevent.
-4. **Move the engine out of shadow mode deliberately, with a kill
-   threshold defined up front.** I'd want a live comparison against the
-   current routing logic on EDD-hit-rate, with an explicit threshold —
-   e.g., if the new engine's EDD-hit-rate underperforms the current
-   baseline by more than a few points after a defined test window, it
-   doesn't ship further, it gets fixed or rolled back. Cost delta would be
-   tracked alongside it, but EDD-hit-rate would be the gating metric,
-   consistent with promise-protection being the default objective.
-5. **Audit trail on rule changes** — since ops can now change routing
-   behavior without an engineering change, I'd want every rule change
-   logged with who made it and the before/after impact snapshot, so it's
-   reviewable after the fact, not just at the moment of the change. 
 
-## Running locally
-
-```
-python3 -m http.server 8000
-```
-
-Then open `http://localhost:8000/`.
+## URL
+https://skiboyscott.github.io/OrderRouting/
