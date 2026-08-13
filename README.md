@@ -27,6 +27,28 @@ I assumed this is a simple, single-parcel order rather than one with
 potential split shipments, and that the incoming order data already has
 everything needed to act on it (order, SKU, EDD, destination).
 
+## How to explore this prototype
+
+Live prototype: https://skiboyscott.github.io/OrderRouting/
+
+A few suggested paths through it:
+
+- **See the routing decision itself** — [Orders], pick any order, and see
+  the full reasoning trace: every FC + carrier combination that was
+  evaluated, which gates it passed or failed, and why the winner was chosen
+  over the runner-up.
+- **Test the rules engine** — Configure → Routing rules. Toggle between
+  "Protect the promise" and "Minimize cost, date as floor," adjust the
+  thresholds (late tolerance, premium cap, cost ceiling, facility load
+  penalty), then Re-run engine. The impact panel shows exactly what changes
+  against the current batch before anything goes live — this runs in
+  shadow mode, so nothing is committed until you choose to.
+- **Add your own order** — [wherever Add Order lives], to see how a new
+  order routes under the current rule configuration. It's bound by the
+  same fabricated FC and carrier data as the rest of the prototype, but
+  lets you sanity-check the engine against a case you construct yourself.
+
+# Details:
 ## How the engine decides
 
 For each order, the engine evaluates every **fulfillment center + carrier
@@ -137,7 +159,3 @@ system would need to get right:
 4. Kill threshold defined up front - how can we be more explicit in defining and measuring the EDDs and more aggressive in order routing
 5. a real metrics dashboard instead of what is there
 6. audit trail on rules changes since these carry real business impact
-
-
-## URL
-https://skiboyscott.github.io/OrderRouting/
