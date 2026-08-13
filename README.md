@@ -1,4 +1,4 @@
-# ODM prototype — order routing engine
+# Order Routing Engine Merchant Prototype
 
 ## Objective
 
@@ -6,6 +6,8 @@ ShipBob is moving from SLA-based commitments to an Estimated Delivery Date (EDD)
 model, which means the network — not the merchant — is accountable for hitting
 the date shown to the shopper at checkout. That reframes the routing problem:
 the job isn't "ship it somehow," it's "protect the promise."
+
+This is built for the merchant shipping through ShipBob as the persona. 
 
 **By default, this engine optimizes for hitting the promised EDD**, with cost
 as the main decision driver: among fulfillment center + carrier combinations
