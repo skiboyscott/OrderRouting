@@ -149,7 +149,7 @@ system would need to get right:
 5. **Audit trail on rule changes** — since ops can now change routing
    behavior without an engineering change, I'd want every rule change
    logged with who made it and the before/after impact snapshot, so it's
-   reviewable after the fact, not just at the moment of the change.
+   reviewable after the fact, not just at the moment of the change. 
 
 ## Running locally
 
