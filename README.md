@@ -1,5 +1,5 @@
 # Order Routing Engine Merchant Prototype
-Site: https://skiboyscott.github.io/OrderRouting
+Prototype: https://skiboyscott.github.io/OrderRouting
 
 ## Objective
 
