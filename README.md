@@ -162,6 +162,6 @@ system would need to get right:
 6. audit trail on rules changes since these carry real business impact
 
 ## Before this would get in front of a merchant...
-First, i would develop the prototype a bit more and optimize for the UX. I feel like this might still be a bit much for a merchant and would spend some more time optimizing the experience.
-Secondly, I would spend some more time working through real-life scenarios of orders and routing to hone in the engine quite a bit more to pressure test the logic. 
+- First, i would develop the prototype a bit more and optimize for the UX. I feel like this might still be a bit much for a merchant and would spend some more time optimizing the experience.
+- Secondly, I would spend some more time working through real-life scenarios of orders and routing to hone in the engine quite a bit more to pressure test the logic. 
 - With some of those iterations, i would then spend some time with real merchants to start weaving in their experience and feedback to continue to iterate, eventually bringing in engineering to start thinking about building this. 
