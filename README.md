@@ -1,4 +1,5 @@
 # Order Routing Engine Merchant Prototype
+Site: https://github.com/skiboyscott/OrderRouting
 
 ## Objective
 
@@ -12,7 +13,7 @@ This is built for the merchant shipping through ShipBob as the persona.
 **By default, this engine optimizes for hitting the promised EDD**, with cost
 as the main decision driver: among fulfillment center + carrier combinations
 that can still hit the date, it picks the cheapest one, within the threshold. That's the "Protect
-the promise" mode in the rules engine (see below) — but it isn't hardcoded.
+the promise" mode in the rules engine (see below), but it isn't hardcoded.
 Merchants can instead configure the engine to **minimize cost with the date as a
 floor**, where the cheapest route within a defined late-tolerance wins, and a
 faster route is only chosen when nothing cheaper qualifies.
@@ -20,7 +21,7 @@ faster route is only chosen when nothing cheaper qualifies.
 Either mode holds the same invariant: **cost never silently beats the date.**
 In promise-first mode, cost only ever chooses among on-time routes. In
 cost-first mode, a late-tolerance window and a cost ceiling bound how far the
-engine can drift from the promise — beyond that, it downgrades the order and
+engine can drift from the promise. Beyond that, it downgrades the order and
 says so, rather than quietly shipping late to save money.
 
 I assumed this is a simple, single-parcel order rather than one with
@@ -33,17 +34,17 @@ Live prototype: https://skiboyscott.github.io/OrderRouting/
 
 A few suggested paths through it:
 
-- **See the routing decision itself** — [Orders], pick any order, and see
+- **See the routing decision itself** - [Orders], pick any order, and see
   the full reasoning trace: every FC + carrier combination that was
   evaluated, which gates it passed or failed, and why the winner was chosen
   over the runner-up.
-- **Test the rules engine** — Configure → Routing rules. Toggle between
+- **Test the rules engine** - Configure → Routing rules. Toggle between
   "Protect the promise" and "Minimize cost, date as floor," adjust the
   thresholds (late tolerance, premium cap, cost ceiling, facility load
   penalty), then Re-run engine. The impact panel shows exactly what changes
   against the current batch before anything goes live — this runs in
   shadow mode, so nothing is committed until you choose to.
-- **Add your own order** — [wherever Add Order lives], to see how a new
+- **Add your own order** - [wherever Add Order lives], to see how a new
   order routes under the current rule configuration. It's bound by the
   same fabricated FC and carrier data as the rest of the prototype, but
   lets you sanity-check the engine against a case you construct yourself.
@@ -52,21 +53,21 @@ A few suggested paths through it:
 ## How the engine decides
 
 For each order, the engine evaluates every **fulfillment center + carrier
-combination** in the network — not just FCs in isolation — through three
+combination** in the network (not just FCs in isolation) through three
 gates, in order, and **every combination's evaluation is shown, not just the
 winner's**:
 
-1. **Constraint gate** — blunt on/off rules applied before any scoring. Anything excluded here never reaches scoring at all.
-3. **Stock gate** — does the FC have enough on-hand inventory for the order?
+1. **Constraint gate** - blunt on/off rules applied before any scoring. Anything excluded here never reaches scoring at all.
+3. **Stock gate** - does the FC have enough on-hand inventory for the order?
    FCs without stock are eliminated, along with every carrier option that
    would have shipped from them.
-4. **Promise gate** — for each FC that passes, every available carrier /
+4. **Promise gate** - for each FC that passes, every available carrier /
    service level is evaluated for transit time, including a facility-load
    penalty: FCs running above a configurable utilization threshold (default
    60%) get a one-day handling penalty in the transit math, which naturally
    pushes volume toward quieter facilities. Would the order arrive by the
    promised EDD via this specific FC + carrier pairing?
-5. **Cost gate** — among combinations that clear the prior gates (per the
+5. **Cost gate** - among combinations that clear the prior gates (per the
    active objective mode and its thresholds), the winner is selected, and
    the runner-up's cost is shown alongside it so the actual dollar tradeoff
    is visible, not implied.
@@ -85,22 +86,22 @@ I built a self-service rules engine because routing priorities shouldn't require
 business wants to shift strategy, so the objective and its thresholds are
 exposed as a configuration surface an ops user can adjust directly:
 
-- **Primary objective** — toggle between "Protect the promise" and
+- **Primary objective** - toggle between "Protect the promise" and
   "Minimize cost, date as floor," as described above.
-- **Late tolerance** — how many days past the promised date the engine may
+- **Late tolerance** - how many days past the promised date the engine may
   accept as-is before it's forced to spend up to the premium cap (see
   below) to buy the date back.
-- **Max premium to protect the date** — the extra spend per parcel the
+- **Max premium to protect the date** - the extra spend per parcel the
   engine may accept over the cheapest available route in order to hit the
   promise. Above this, it falls back within the late-tolerance window
   instead, and says so on the order.
-- **Cost ceiling per parcel** — a hard cap. A selected route above this
+- **Cost ceiling per parcel** - a hard cap. A selected route above this
   ceiling still ships — the date is never broken to save money — but the
   overage is reported on the order so it's visible, not absorbed silently.
 - **Facility load penalty threshold** — the utilization percentage above
   which a facility takes the one-day handling penalty described in the
   promise gate above.
-- **Constraints** — allow/disallow air service network-wide; excluded
+- **Constraints** - allow/disallow air service network-wide; excluded
   paused facilities and disabled carrier services are pulled directly from
   the Facilities and Carriers pages and removed from every route table
   before scoring runs.
@@ -117,13 +118,13 @@ change and re-run it against live orders before committing.
   are processed in order of promise urgency (tightest EDD first), and
   inventory reservations carry across the batch so later orders see
   accurate stock.
-- **Out-of-stock cascade**: order `O-1002` — the closest FC (Chicago) is the
+- **Out-of-stock cascade**: order `O-1002` - the closest FC (Chicago) is the
   obvious pick by distance, but it has zero stock of the SKU. The engine
   eliminates it at the stock gate and lands on New Jersey, the cheapest
   FC + carrier combination that still hits the date.
 - **Last-unit contention**: orders `O-1003` and `O-1004` both need a SKU
   where only one unit exists at each of two FCs. `O-1003` has the tighter
-  deadline, claims the unit at LAX, and `O-1004` — which loses that unit —
+  deadline, claims the unit at LAX, and `O-1004`  (which loses that unit)
   cleanly reroutes to the remaining unit at Chicago rather than failing.
 
 ## Add Order model testing
